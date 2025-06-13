@@ -6,7 +6,7 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 st.set_page_config(layout="wide", page_title="FX Threshold Backtester - Final Complete App")
 
-st.title("FX Threshold Backtesting (Full Final Version)")
+st.title("FX Threshold Backtesting App")
 
 st.header("Step 1: Upload Files")
 col_left, col_right = st.columns(2)
