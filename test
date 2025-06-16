@@ -1,0 +1,172 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+st.set_page_config(layout="wide", page_title="GFX Threshold Backtester App")
+st.title("GFX Threshold Backtesting App")
+
+st.header("Step 1: Upload Files")
+col_left, col_right = st.columns(2)
+
+with col_left:
+    group_file = st.file_uploader("Upload Threshold Mapping File (LegalEntity, CCY, Old_Group, Old_Threshold, Proposed_Group, Proposed_Threshold)", type=["csv", "xlsx"])
+
+with col_right:
+    trade_file = st.file_uploader("Upload Trade File (Instrument, deviation_percent, LegalEntity)", type=["csv", "xlsx"])
+
+group_bounds = {}
+
+def load_group_bounds(df):
+    global group_bounds
+    group_bounds = {row['Proposed_Group']: row['Proposed_Threshold'] for _, row in df.groupby('Proposed_Group')[['Proposed_Threshold']].first().reset_index().iterrows()}
+    group_bounds = dict(sorted(group_bounds.items(), key=lambda x: x[1]))
+
+def assign_group(threshold):
+    for group, bound in group_bounds.items():
+        if threshold <= bound:
+            return group
+    return list(group_bounds.keys())[-1]
+
+if group_file and trade_file:
+    full_df = pd.read_excel(group_file) if group_file.name.endswith("xlsx") else pd.read_csv(group_file)
+    trade_df = pd.read_excel(trade_file) if trade_file.name.endswith("xlsx") else pd.read_csv(trade_file)   
+
+load_group_bounds(full_df)
+
+col1, col2 = st.columns([2.5, 1.5])
+
+with col1:
+    st.subheader("✏️ Reassign Currency Groups")
+
+    editable_group_df = full_df[["CCY", "Proposed_Group", "Old_Threshold", "Proposed_Threshold"]].copy()
+    editable_group_df.rename(columns={"Proposed_Group": "Current_Group"}, inplace=True)
+
+    group_threshold_map = full_df.groupby("Proposed_Group")["Proposed_Threshold"].first().to_dict()
+    editable_group_df["Final_Threshold"] = editable_group_df["Current_Group"].map(group_threshold_map)
+
+    gb = GridOptionsBuilder.from_dataframe(editable_group_df)
+    gb.configure_columns(["Current_Group"], editable=True)
+    gb.configure_grid_options(domLayout="normal", pagination=True)
+    grid_output = AgGrid(editable_group_df, gridOptions=gb.build(), update_mode=GridUpdateMode.VALUE_CHANGED, height=400)
+    edited_df = grid_output["data"]
+
+    edited_df["Final_Threshold"] = edited_df["Current_Group"].map(group_threshold_map)
+    edited_df["Source"] = edited_df.apply(
+        lambda row: "Manual Override" if row["Current_Group"] != row["Current_Group"] else "Group Default", axis=1
+    )
+    edited_df["Final_Group"] = edited_df["Final_Threshold"].apply(assign_group)
+    currency_df = edited_df.rename(columns={"Current_Group": "Group"})
+
+with col2:
+    st.subheader("Summary Stats")
+    st.metric("Total Trades", len(trade_df))
+    st.metric("Currency Pairs", trade_df["Instrument"].nunique())
+    st.metric("Legal Entities", trade_df["LegalEntity"].nunique())
+
+    threshold_map = currency_df.set_index("CCY")["Final_Threshold"].to_dict()
+    ccy_group_map = currency_df.set_index("CCY")["Final_Group"].to_dict()
+
+    def get_threshold(instr):
+        try:
+            base, quote = instr.split("/")
+            return max(threshold_map.get(base, 0), threshold_map.get(quote, 0))
+        except:
+            return 0
+
+    def get_group_fast(instr):
+        try:
+            base, quote = instr.split("/")
+            g1 = ccy_group_map.get(base, "")
+            g2 = ccy_group_map.get(quote, "")
+            return max(g1, g2)
+        except:
+            return ""
+
+    def map_thresh(instr, field):
+        try:
+            base, quote = instr.split("/")
+            return max(currency_df.set_index("CCY").get(field, {}).get(base, 0),
+                       currency_df.set_index("CCY").get(field, {}).get(quote, 0))
+        except:
+            return 0
+
+    trade_df["Threshold_Old"] = trade_df["Instrument"].apply(lambda x: map_thresh(x, "Old_Threshold"))
+    trade_df["Threshold_Proposed"] = trade_df["Instrument"].apply(lambda x: map_thresh(x, "Proposed_Threshold"))
+    trade_df["Threshold_Final"] = trade_df["Instrument"].apply(lambda x: map_thresh(x, "Final_Threshold"))
+
+    trade_df["Alert_Old"] = trade_df["deviation_percent"] > trade_df["Threshold_Old"]
+    trade_df["Alert_Proposed"] = trade_df["deviation_percent"] > trade_df["Threshold_Proposed"]
+    trade_df["Alert_Final"] = trade_df["deviation_percent"] > trade_df["Threshold_Final"]
+
+    trade_df["CCY_Pair_Group"] = trade_df["Instrument"].apply(get_group_fast)
+
+    st.metric("Alerts wrt Existing Threshold", int(trade_df["Alert_Old"].sum()))
+    st.metric("Alerts After Calibration", int(trade_df["Alert_Final"].sum()))
+    st.metric("No Alerts", int((~trade_df["Alert_Final"]).sum()))
+
+st.header("Step 2: Visual Summary")
+st.subheader("Group-Level Impact Table")
+group_summary = trade_df.groupby(["CCY_Pair_Group", "Instrument"]).agg(
+    Total_Trades=('Instrument', 'count'),
+    Alerts_Old=('Alert_Old', 'sum'),
+    Alerts_Proposed=('Alert_Proposed', 'sum'),
+    Alerts_Final=('Alert_Final', 'sum')
+).reset_index().rename(columns={"CCY_Pair_Group": "Group", "Instrument": "Currency_Pair"})
+st.dataframe(group_summary)
+
+alert_df = pd.DataFrame({
+    "Scenario": ["Old", "Proposed", "Final"],
+    "Alert Count": [
+        trade_df["Alert_Old"].sum(),
+        trade_df["Alert_Proposed"].sum(),
+        trade_df["Alert_Final"].sum()
+    ]
+})
+alert_df["Change vs Old (%)"] = alert_df["Alert Count"].apply(lambda x: round(((x - alert_df["Alert Count"][0]) / alert_df["Alert Count"][0]) * 100, 1))
+alert_df["Label"] = alert_df["Alert Count"].astype(str) + " (" + alert_df["Change vs Old (%)"].astype(str) + "%)"
+
+fig = px.bar(
+    alert_df,
+    x="Scenario",
+    y="Alert Count",
+    text="Label",
+    color="Scenario",
+    color_discrete_map={"Old": "gray", "Proposed": "dodgerblue", "Final": "seagreen"},
+    title="Total Alert Volume Comparison"
+)
+fig.update_traces(textposition="outside")
+fig.update_layout(yaxis_title="Alert Count", showlegend=False)
+st.plotly_chart(fig, use_container_width=True)
+
+st.subheader("Legal Entity Breakdown")
+entity_melted = trade_df.groupby("LegalEntity")[["Alert_Old", "Alert_Proposed", "Alert_Final"]].sum().reset_index()
+entity_df = entity_melted.melt(id_vars="LegalEntity", var_name="Scenario", value_name="Alert Count")
+entity_df["Scenario"] = entity_df["Scenario"].str.replace("Alert_", "")
+
+fig2 = px.bar(
+    entity_df,
+    x="LegalEntity",
+    y="Alert Count",
+    color="Scenario",
+    barmode="group",
+    title="Alerts by Legal Entity"
+)
+st.plotly_chart(fig2, use_container_width=True)
+
+with st.expander("Toggle Views: Chart or Table"):
+    view_mode = st.radio("Select View", ["Aggregate Chart", "Legal Entity Table"], horizontal=True)
+    if view_mode == "Aggregate Chart":
+        st.plotly_chart(fig, use_container_width=True, key="Aggregate Chart")
+    else:
+        entity_pivot = entity_df.pivot(index="LegalEntity", columns="Scenario", values="Alert Count").fillna(0).reset_index()
+        st.dataframe(entity_pivot)
+
+st.download_button("Download Full Trade Analysis", trade_df.to_csv(index=False), "fx_alert_comparison_final.csv", "text/csv")
+
+st.subheader("Audit Trail")
+audit_df = currency_df.copy()
+audit_df["Changed?"] = audit_df["Final_Threshold"] != audit_df["Proposed_Threshold"]
+audit_df["Change %"] = ((audit_df["Final_Threshold"] - audit_df["Proposed_Threshold"]) / audit_df["Proposed_Threshold"]).round(4)
+st.dataframe(audit_df)
+st.download_button("Download Audit Trail", audit_df.to_csv(index=False), "threshold_audit_trail.csv", "text/csv")
