@@ -1,0 +1,20 @@
+if st.button("Reset Final Thresholds"):
+    group_thresh["Final_Threshold"] = group_thresh["Proposed_Threshold"]
+
+# Always refresh the grid using updated group_thresh
+gb = GridOptionsBuilder.from_dataframe(group_thresh)
+gb.configure_columns(["Final_Threshold"], editable=True)
+gb.configure_grid_options(domLayout="normal", pagination=True)
+grid_output = AgGrid(group_thresh, gridOptions=gb.build(), update_mode=GridUpdateMode.VALUE_CHANGED, height=300)
+group_final = grid_output["data"]
+
+
+if st.button("Reset Final Thresholds"):
+    editable_df["Final_Threshold"] = editable_df["Proposed_Threshold"]
+
+# Always refresh the grid using updated editable_df
+gb = GridOptionsBuilder.from_dataframe(editable_df)
+gb.configure_columns(["Final_Threshold"], editable=True)
+gb.configure_grid_options(domLayout="normal", pagination=True)
+grid_output = AgGrid(editable_df, gridOptions=gb.build(), update_mode=GridUpdateMode.VALUE_CHANGED, height=300)
+currency_df = grid_output["data"]
