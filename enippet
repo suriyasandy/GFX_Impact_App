@@ -1,0 +1,3 @@
+trade_df["Group"] = trade_df["Instrument"].astype(str).map(
+    lambda x: max(group_map.get(x.split("/")[0], "Group 1"), group_map.get(x.split("/")[1], "Group 1"))
+)
