@@ -1,0 +1,109 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+st.set_page_config(layout="wide", page_title="GFX Threshold Backtester App")
+st.title("GFX Threshold Backtesting App")
+
+st.header("Step 1: Upload Files")
+col_left, col_right = st.columns(2)
+
+with col_left:
+    group_file = st.file_uploader("Upload Threshold Mapping File (LegalEntity, CCY, Old_Group, Old_Threshold, Proposed_Group, Proposed_Threshold)", type=["csv", "xlsx"])
+
+with col_right:
+    trade_file = st.file_uploader("Upload Trade File (Instrument, deviation_percent, LegalEntity)", type=["csv", "xlsx"])
+
+edit_mode = st.radio("Edit Mode", ["Group-Wise", "Currency-Wise"], horizontal=True)
+
+group_bounds = {}
+
+def load_group_bounds(df):
+    global group_bounds
+    group_bounds = {row['Proposed_Group']: row['Proposed_Threshold'] for _, row in df.groupby('Proposed_Group')[['Proposed_Threshold']].first().reset_index().iterrows()}
+    group_bounds = dict(sorted(group_bounds.items(), key=lambda x: x[1]))
+
+def assign_group(threshold):
+    for group, bound in group_bounds.items():
+        if threshold <= bound:
+            return group
+    return list(group_bounds.keys())[-1]
+
+if group_file and trade_file:
+    full_df = pd.read_excel(group_file) if group_file.name.endswith("xlsx") else pd.read_csv(group_file)
+    trade_df = pd.read_excel(trade_file) if trade_file.name.endswith("xlsx") else pd.read_csv(trade_file)
+
+    load_group_bounds(full_df)
+
+    col1, col2 = st.columns([2.5, 1.5])
+
+    with col1:
+        st.subheader("✏️ Edit Thresholds")
+        if edit_mode == "Group-Wise":
+            group_thresh = full_df.groupby("Proposed_Group")[["Old_Threshold", "Proposed_Threshold"]].first().reset_index()
+            group_thresh.rename(columns={"Proposed_Group": "Group"}, inplace=True)
+            if "Final_Threshold" not in group_thresh.columns:
+                group_thresh["Final_Threshold"] = group_thresh["Proposed_Threshold"]
+            if st.button("Reset Final Thresholds"):
+                group_thresh["Final_Threshold"] = group_thresh["Proposed_Threshold"]
+            gb = GridOptionsBuilder.from_dataframe(group_thresh)
+            gb.configure_columns(["Final_Threshold"], editable=True)
+            gb.configure_grid_options(domLayout="normal", pagination=True)
+            grid_output = AgGrid(group_thresh, gridOptions=gb.build(), update_mode=GridUpdateMode.VALUE_CHANGED, height=300)
+            group_final = grid_output["data"]
+            merged = pd.merge(full_df[["CCY", "Proposed_Group"]], group_final, left_on="Proposed_Group", right_on="Group", how="left")
+            merged["Source"] = "Group Default"
+            currency_df = merged[["CCY", "Group", "Old_Threshold", "Proposed_Threshold", "Final_Threshold", "Source"]]
+        else:
+            editable_df = full_df[["CCY", "Proposed_Group", "Old_Threshold", "Proposed_Threshold"]].copy()
+            editable_df.rename(columns={"Proposed_Group": "Group"}, inplace=True)
+            if "Final_Threshold" not in editable_df.columns:
+                editable_df["Final_Threshold"] = editable_df["Proposed_Threshold"]
+            if st.button("Reset Final Thresholds"):
+                editable_df["Final_Threshold"] = editable_df["Proposed_Threshold"]
+            gb = GridOptionsBuilder.from_dataframe(editable_df)
+            gb.configure_columns(["Final_Threshold"], editable=True)
+            gb.configure_grid_options(domLayout="normal", pagination=True)
+            grid_output = AgGrid(editable_df, gridOptions=gb.build(), update_mode=GridUpdateMode.VALUE_CHANGED, height=300)
+            currency_df = grid_output["data"]
+            currency_df["Source"] = currency_df.apply(
+                lambda row: "Custom Override" if row["Final_Threshold"] != row["Proposed_Threshold"] else "Group Default", axis=1
+            )
+
+        currency_df["Final_Group"] = currency_df["Final_Threshold"].apply(assign_group)
+
+    with col2:
+        st.subheader("Summary Stats")
+        st.metric("Total Trades", len(trade_df))
+        st.metric("Currency Pairs", trade_df["Instrument"].nunique())
+        st.metric("Legal Entities", trade_df["LegalEntity"].nunique())
+
+        threshold_map = currency_df.set_index("CCY")["Final_Threshold"].to_dict()
+
+        def get_threshold(instr):
+            try:
+                base, quote = instr.split("/")
+                return max(threshold_map.get(base, 0), threshold_map.get(quote, 0))
+            except:
+                return 0
+
+        def map_thresh(instr, field):
+            try:
+                base, quote = instr.split("/")
+                return max(currency_df.set_index("CCY").get(field, {}).get(base, 0),
+                           currency_df.set_index("CCY").get(field, {}).get(quote, 0))
+            except:
+                return 0
+
+        trade_df["Threshold_Old"] = trade_df["Instrument"].apply(lambda x: map_thresh(x, "Old_Threshold"))
+        trade_df["Threshold_Proposed"] = trade_df["Instrument"].apply(lambda x: map_thresh(x, "Proposed_Threshold"))
+        trade_df["Threshold_Final"] = trade_df["Instrument"].apply(lambda x: map_thresh(x, "Final_Threshold"))
+
+        trade_df["Alert_Old"] = trade_df["deviation_percent"] > trade_df["Threshold_Old"]
+        trade_df["Alert_Proposed"] = trade_df["deviation_percent"] > trade_df["Threshold_Proposed"]
+        trade_df["Alert_Final"] = trade_df["deviation_percent"] > trade_df["Threshold_Final"]
+
+        st.metric("Alerts wrt Existing Threshold", int(trade_df["Alert_Old"].sum()))
+        st.metric("Alerts After Calibration", int(trade_df["Alert_Final"].sum()))
+        st.metric("No Alerts", int((~trade_df["Alert_Final"]).sum()))
