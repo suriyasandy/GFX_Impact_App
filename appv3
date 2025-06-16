@@ -107,3 +107,12 @@ if group_file and trade_file:
         st.metric("Alerts wrt Existing Threshold", int(trade_df["Alert_Old"].sum()))
         st.metric("Alerts After Calibration", int(trade_df["Alert_Final"].sum()))
         st.metric("No Alerts", int((~trade_df["Alert_Final"]).sum()))
+
+    st.header("Step 2: Visual Summary")
+    st.subheader("Trade-Level Impact Table")
+    summary_table = trade_df.groupby("Instrument").agg(
+        Total_Trades=('Instrument', 'count'),
+        Alerts_Before=('Alert_Old', 'sum'),
+        Alerts_After=('Alert_Final', 'sum')
+    ).reset_index().rename(columns={"Instrument": "CCY_Pair"})
+    st.dataframe(summary_table)
