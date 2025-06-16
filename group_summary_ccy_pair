@@ -1,0 +1,19 @@
+# --- Trade-Level Summary Table with Group Info ---
+def get_group(instr):
+    try:
+        base, quote = instr.split("/")
+        g1 = currency_df.set_index("CCY").get("Final_Group", {}).get(base, "")
+        g2 = currency_df.set_index("CCY").get("Final_Group", {}).get(quote, "")
+        return max(g1, g2)
+    except:
+        return ""
+
+trade_df["CCY_Pair_Group"] = trade_df["Instrument"].apply(get_group)
+
+summary_table = trade_df.groupby(["Instrument", "CCY_Pair_Group"]).agg(
+    Total_Trades=('Instrument', 'count'),
+    Alerts_Before=('Alert_Old', 'sum'),
+    Alerts_After=('Alert_Final', 'sum')
+).reset_index().rename(columns={"Instrument": "CCY_Pair", "CCY_Pair_Group": "Group"})
+
+st.dataframe(summary_table)
