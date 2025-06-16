@@ -1,3 +1,27 @@
 trade_df["Group"] = trade_df["Instrument"].astype(str).map(
     lambda x: max(group_map.get(x.split("/")[0], "Group 1"), group_map.get(x.split("/")[1], "Group 1"))
 )
+
+
+# Prepare stacked data by group
+group_alerts = trade_df.groupby("Group").agg(
+    Old=("Alert_Old", "sum"),
+    Proposed=("Alert_Proposed", "sum"),
+    Final=("Alert_Final", "sum")
+).reset_index()
+
+# Melt into long format for stacked bar chart
+group_alerts_melted = group_alerts.melt(id_vars="Group", var_name="Scenario", value_name="Alert Count")
+
+# Plot stacked bar chart
+fig = px.bar(
+    group_alerts_melted,
+    x="Scenario",
+    y="Alert Count",
+    color="Group",
+    text_auto=True,
+    title="Total Alert Volume Comparison (Stacked by Group)",
+    labels={"Alert Count": "Alert Volume"}
+)
+fig.update_layout(barmode="stack", yaxis_title="Alert Count")
+st.plotly_chart(fig, use_container_width=True)
