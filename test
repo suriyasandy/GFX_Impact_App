@@ -1,9 +1,5 @@
-
-# --- Full updated code with dynamic group-wise editing and drag-and-drop logic ---
-
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
@@ -11,12 +7,11 @@ st.set_page_config(layout="wide", page_title="GFX Threshold Backtester App")
 st.title("GFX Threshold Backtesting App")
 
 st.header("Step 1: Upload Files")
-col_left, col_right = st.columns(2)
+col1, col2 = st.columns(2)
 
-with col_left:
+with col1:
     group_file = st.file_uploader("Upload Threshold Mapping File", type=["csv", "xlsx"])
-
-with col_right:
+with col2:
     trade_file = st.file_uploader("Upload Trade File", type=["csv", "xlsx"])
 
 edit_mode = st.radio("Edit Mode", ["Group-Wise", "Currency-Wise"], horizontal=True)
@@ -25,6 +20,7 @@ if group_file and trade_file:
     full_df = pd.read_excel(group_file) if group_file.name.endswith("xlsx") else pd.read_csv(group_file)
     trade_df = pd.read_excel(trade_file) if trade_file.name.endswith("xlsx") else pd.read_csv(trade_file)
 
+    # Define group thresholds
     group_bounds = full_df.groupby("Proposed_Group")["Proposed_Threshold"].first().sort_values().to_dict()
 
     def assign_group(th):
@@ -33,44 +29,27 @@ if group_file and trade_file:
                 return group
         return list(group_bounds.keys())[-1]
 
-    col1, col2 = st.columns([2.5, 1.5])
-    with col1:
+    col3, col4 = st.columns([2.5, 1.5])
+    with col3:
         st.subheader("✏️ Edit Thresholds")
-        if edit_mode == "Group-Wise":
-            group_df = full_df.groupby("Proposed_Group")[["Old_Threshold", "Proposed_Threshold"]].first().reset_index()
-            group_df.rename(columns={"Proposed_Group": "Group"}, inplace=True)
-            group_df["Final_Threshold"] = group_df["Proposed_Threshold"]
-            if st.button("Reset Final Thresholds"):
-                group_df["Final_Threshold"] = group_df["Proposed_Threshold"]
-            gb = GridOptionsBuilder.from_dataframe(group_df)
-            gb.configure_columns(["Final_Threshold"], editable=True)
-            grid_output = AgGrid(group_df, gridOptions=gb.build(), update_mode=GridUpdateMode.VALUE_CHANGED, height=300)
-            group_final = grid_output["data"]
-            merged = pd.merge(full_df[["CCY", "Proposed_Group"]], group_final, left_on="Proposed_Group", right_on="Group", how="left")
-            currency_df = merged[["CCY", "Group", "Old_Threshold", "Proposed_Threshold", "Final_Threshold"]]
-        else:
-            editable_df = full_df[["CCY", "Proposed_Group", "Old_Threshold", "Proposed_Threshold"]].copy()
-            editable_df.rename(columns={"Proposed_Group": "Group"}, inplace=True)
+        editable_df = full_df[["CCY", "Proposed_Group", "Old_Threshold", "Proposed_Threshold"]].copy()
+        editable_df.rename(columns={"Proposed_Group": "Group"}, inplace=True)
+        editable_df["Final_Threshold"] = editable_df["Proposed_Threshold"]
+        if st.button("Reset Final Thresholds"):
             editable_df["Final_Threshold"] = editable_df["Proposed_Threshold"]
-            if st.button("Reset Final Thresholds"):
-                editable_df["Group"] = editable_df["Group"]
-                editable_df["Final_Threshold"] = editable_df["Proposed_Threshold"]
-            gb = GridOptionsBuilder.from_dataframe(editable_df)
-            gb.configure_columns(["Final_Threshold", "Group"], editable=True)
-            grid_output = AgGrid(editable_df, gridOptions=gb.build(), update_mode=GridUpdateMode.VALUE_CHANGED, height=400)
-            currency_df = grid_output["data"]
-            group_to_threshold = full_df.groupby("Proposed_Group")["Proposed_Threshold"].first().to_dict()
-            currency_df["Final_Threshold"] = currency_df["Group"].map(group_to_threshold)
-            currency_df["Final_Group"] = currency_df["Group"]
+        gb = GridOptionsBuilder.from_dataframe(editable_df)
+        gb.configure_columns(["Final_Threshold", "Group"], editable=True)
+        grid_output = AgGrid(editable_df, gridOptions=gb.build(), update_mode=GridUpdateMode.VALUE_CHANGED, height=400)
+        currency_df = grid_output["data"]
+        currency_df["Final_Group"] = currency_df["Final_Threshold"].apply(assign_group)
 
-    currency_df["Final_Group"] = currency_df["Final_Threshold"].apply(assign_group)
-
-    with col2:
+    with col4:
         st.subheader("Summary Stats")
         st.metric("Total Trades", len(trade_df))
         st.metric("Currency Pairs", trade_df["Instrument"].nunique())
         st.metric("Legal Entities", trade_df["LegalEntity"].nunique())
 
+    # Maps
     old_map = currency_df.set_index("CCY")["Old_Threshold"].to_dict()
     prop_map = currency_df.set_index("CCY")["Proposed_Threshold"].to_dict()
     final_map = currency_df.set_index("CCY")["Final_Threshold"].to_dict()
@@ -95,26 +74,25 @@ if group_file and trade_file:
     st.metric("No Alerts", int((~trade_df["Alert_Final"]).sum()))
 
     st.header("Step 2: Visual Summary")
+    st.subheader("📊 Group-wise Impact Summary")
 
+    # Map back currency groups from currency_df
     ccy_group_map = currency_df.set_index("CCY")["Final_Group"].to_dict()
-    def get_ccy_group(instr):
+    def get_group(instr):
         try:
             base, quote = instr.split("/")
             return max(ccy_group_map.get(base, ""), ccy_group_map.get(quote, ""))
         except:
             return ""
 
-    trade_df["Group"] = trade_df["Instrument"].apply(get_ccy_group)
+    trade_df["Group"] = trade_df["Instrument"].apply(get_group)
 
-    summary_by_group = trade_df.groupby(["Group", "Instrument"]).agg(
-        Trades=("Instrument", "count"),
-        Alerts_Old=("Alert_Old", "sum"),
-        Alerts_Proposed=("Alert_Proposed", "sum"),
-        Alerts_Final=("Alert_Final", "sum")
-    ).reset_index()
+    group_summary = currency_df.groupby("Final_Group")["CCY"].agg(list).reset_index().rename(columns={"Final_Group": "Group", "CCY": "Currencies"})
+    group_summary["Currencies"] = group_summary["Currencies"].apply(lambda x: ", ".join(sorted(x)))
+    alert_summary = trade_df.groupby("Group")[["Alert_Old", "Alert_Proposed", "Alert_Final"]].sum().reset_index()
 
-    st.subheader("📊 Group-wise Impact Summary")
-    st.dataframe(summary_by_group)
+    merged_summary = pd.merge(group_summary, alert_summary, on="Group", how="left")
+    st.dataframe(merged_summary)
 
     alert_df = pd.DataFrame({
         "Scenario": ["Old", "Proposed", "Final"],
