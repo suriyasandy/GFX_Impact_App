@@ -1,0 +1,41 @@
+st.subheader("Thresholds Table")
+
+if edit_mode == "Group-Wise":
+    # Prepare and cache original group-level threshold table
+    if "original_group_df" not in st.session_state:
+        group_df = threshold_df.groupby("Proposed_Group")[["Old_Threshold", "Proposed_Threshold"]].first().reset_index()
+        group_df.rename(columns={"Proposed_Group": "Group"}, inplace=True)
+        group_df["Final_Threshold"] = group_df["Proposed_Threshold"]
+        st.session_state.original_group_df = group_df.copy()
+
+    group_df = st.session_state.original_group_df.copy()
+
+    if reset_mode:
+        st.session_state.original_group_df["Final_Threshold"] = st.session_state.original_group_df["Proposed_Threshold"]
+        group_df = st.session_state.original_group_df.copy()
+        st.success("✅ Group Thresholds Reset")
+
+    grid_output = display_threshold_table(group_df)
+    group_final = grid_output["data"]
+
+    merged = pd.merge(threshold_df[["CCY", "Proposed_Group"]], group_final,
+                      left_on="Proposed_Group", right_on="Group", how="left")
+    currency_df = merged[["CCY", "Group", "Old_Threshold", "Proposed_Threshold", "Final_Threshold"]]
+
+else:
+    # Prepare and cache original currency-level threshold table
+    if "original_currency_df" not in st.session_state:
+        editable_df = threshold_df[["CCY", "Proposed_Group", "Old_Threshold", "Proposed_Threshold"]].copy()
+        editable_df.rename(columns={"Proposed_Group": "Group"}, inplace=True)
+        editable_df["Final_Threshold"] = editable_df["Proposed_Threshold"]
+        st.session_state.original_currency_df = editable_df.copy()
+
+    editable_df = st.session_state.original_currency_df.copy()
+
+    if reset_mode:
+        st.session_state.original_currency_df["Final_Threshold"] = st.session_state.original_currency_df["Proposed_Threshold"]
+        editable_df = st.session_state.original_currency_df.copy()
+        st.success("✅ Currency Thresholds Reset")
+
+    grid_output = display_threshold_table(editable_df)
+    currency_df = grid_output["data"]
