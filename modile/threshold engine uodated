@@ -1,0 +1,20 @@
+import pandas as pd
+
+def define_group_thresholds(threshold_df):
+    return threshold_df.groupby("Proposed_Group")["Proposed_Threshold"].first().sort_values().to_dict()
+
+def assign_group(threshold, group_bounds):
+    for group, bound in group_bounds.items():
+        if threshold <= bound:
+            return group
+    return list(group_bounds.keys())[-1] if group_bounds else "Group 1"
+
+def apply_final_grouping(currency_df, group_bounds):
+    currency_df["Final_Group"] = currency_df["Final_Threshold"].apply(lambda th: assign_group(th, group_bounds))
+    return currency_df
+
+def build_threshold_maps(currency_df):
+    old_map = currency_df.set_index("CCY")["Old_Threshold"].to_dict()
+    proposed_map = currency_df.set_index("CCY")["Proposed_Threshold"].to_dict()
+    final_map = currency_df.set_index("CCY")["Final_Threshold"].to_dict()
+    return old_map, proposed_map, final_map
