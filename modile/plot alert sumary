@@ -1,0 +1,39 @@
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+def plot_alert_summary(trade_df, chart_type="stacked"):
+    # Compute group-wise alert count per scenario
+    grouped = trade_df.groupby("Group")[["Alert_Old", "Alert_Proposed", "Alert_Final"]].sum().reset_index()
+    melted_df = grouped.melt(id_vars="Group", var_name="Scenario", value_name="Alert Count")
+    melted_df["Scenario"] = melted_df["Scenario"].str.replace("Alert_", "")
+
+    # Compute percentage within each scenario
+    scenario_totals = melted_df.groupby("Scenario")["Alert Count"].transform("sum")
+    melted_df["% of Total"] = (melted_df["Alert Count"] / scenario_totals * 100).round(1)
+    melted_df["Label"] = melted_df["Alert Count"].astype(int).astype(str) + " (" + melted_df["% of Total"].astype(str) + "%)"
+
+    # Create plot
+    barmode = "stack" if chart_type == "stacked" else "group"
+    title = "Alert Volume by Scenario and Group" + (" (Stacked)" if barmode == "stack" else " (Grouped)")
+
+    fig = px.bar(
+        melted_df,
+        x="Scenario",
+        y="Alert Count",
+        color="Group",
+        text="Label",
+        barmode=barmode,
+        title=title
+    )
+
+    fig.update_traces(textposition="outside")
+    fig.update_layout(
+        yaxis_title="Alert Count",
+        xaxis_title="Scenario",
+        legend_title="Group",
+        uniformtext_minsize=8,
+        uniformtext_mode='hide'
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
