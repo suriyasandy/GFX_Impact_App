@@ -1,0 +1,26 @@
+def get_max_threshold(instr, mapping):
+    try:
+        base, quote = instr.split("/")
+        return max(mapping.get(base, 0), mapping.get(quote, 0))
+    except:
+        return 0
+
+def assign_thresholds(trade_df, old_map, prop_map, final_map):
+    trade_df["Threshold_Old"] = trade_df["Instrument"].map(lambda x: get_max_threshold(x, old_map))
+    trade_df["Threshold_Proposed"] = trade_df["Instrument"].map(lambda x: get_max_threshold(x, prop_map))
+    trade_df["Threshold_Final"] = trade_df["Instrument"].map(lambda x: get_max_threshold(x, final_map))
+
+    trade_df["Alert_Old"] = trade_df["deviation_percent"] > trade_df["Threshold_Old"]
+    trade_df["Alert_Proposed"] = trade_df["deviation_percent"] > trade_df["Threshold_Proposed"]
+    trade_df["Alert_Final"] = trade_df["deviation_percent"] > trade_df["Threshold_Final"]
+    return trade_df
+
+def map_trade_group(trade_df, ccy_group_map):
+    def get_group(instr):
+        try:
+            base, quote = instr.split("/")
+            return max(ccy_group_map.get(base, ""), ccy_group_map.get(quote, "Group 1"))
+        except:
+            return "Group 1"
+    trade_df["Group"] = trade_df["Instrument"].apply(get_group)
+    return trade_df
