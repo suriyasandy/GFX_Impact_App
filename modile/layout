@@ -1,0 +1,32 @@
+import streamlit as st
+import plotly.express as px
+
+def show_metrics(trade_df):
+    st.metric("Total Trades", len(trade_df))
+    st.metric("Currency Pairs", trade_df["Instrument"].nunique())
+    st.metric("Legal Entities", trade_df["LegalEntity"].nunique())
+
+    st.metric("Alerts wrt Existing Threshold", int(trade_df["Alert_Old"].sum()))
+    st.metric("Alerts After Calibration", int(trade_df["Alert_Final"].sum()))
+    st.metric("No Alerts", int((~trade_df["Alert_Final"]).sum()))
+
+def plot_alert_summary(trade_df):
+    alert_df = {
+        "Scenario": ["Old", "Proposed", "Final"],
+        "Alert Count": [
+            trade_df["Alert_Old"].sum(),
+            trade_df["Alert_Proposed"].sum(),
+            trade_df["Alert_Final"].sum()
+        ]
+    }
+    df = px.data.tips()  # dummy
+    df = pd.DataFrame(alert_df)
+    df["Change vs Old (%)"] = ((df["Alert Count"] - df["Alert Count"].iloc[0]) / df["Alert Count"].iloc[0] * 100).round(1)
+    df["Label"] = df["Alert Count"].astype(str) + " (" + df["Change vs Old (%)"].astype(str) + "%)"
+
+    fig = px.bar(df, x="Scenario", y="Alert Count", text="Label",
+                 color="Scenario", color_discrete_map={"Old": "gray", "Proposed": "dodgerblue", "Final": "seagreen"},
+                 title="Total Alert Volume Comparison")
+    fig.update_traces(textposition="outside")
+    fig.update_layout(yaxis_title="Alert Count", showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
