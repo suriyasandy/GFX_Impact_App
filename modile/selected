@@ -1,0 +1,16 @@
+if not selected_rows.empty:
+    row_dict = selected_rows.iloc[0].to_dict()  # ✅ Get first row as dictionary
+    legal = row_dict.get("LegalEntity")
+    source = row_dict.get("Source")
+    st.write("Selected Legal Entity:", legal)
+    st.write("Selected Source:", source)
+
+    # Filter alerts based on this selection (and date range, if applicable)
+    filtered_df = alert_results[
+        (alert_results["LegalEntity"] == legal) &
+        (alert_results["Source"] == source) &
+        (alert_results["business_date"] >= start_date) &
+        (alert_results["business_date"] <= end_date)
+    ]
+    st.subheader("🔎 Matching Alert Records")
+    st.dataframe(filtered_df)
