@@ -1,0 +1,59 @@
+# app.py
+import streamlit as st
+from file_loader import load_trade_and_threshold_files
+from threshold_engine import process_thresholds
+from alert_logic import compute_alerts
+from summary_generator import generate_summaries
+from charts import (
+    plot_alert_summary,
+    plot_legal_entity_breakdown,
+    plot_alert_summary_stacked
+)
+from layout import display_audit_trail, display_group_edit_section
+
+st.set_page_config(layout="wide", page_title="GFX Threshold Backtester App")
+st.title("📈 GFX Threshold Backtesting App")
+
+# Step 1: Upload
+st.header("Step 1: Upload Files per Legal Entity")
+entity_files = load_trade_and_threshold_files()
+
+if entity_files:
+    for entity, files in entity_files.items():
+        st.markdown(f"### Legal Entity: **{entity}**")
+        threshold_df, trade_df = files["threshold"], files["trade"]
+
+        # Step 2: Process thresholds with UI
+        currency_df, edit_mode = display_group_edit_section(threshold_df)
+
+        # Step 3: Compute alerts and enrich trade data
+        enriched_trades = compute_alerts(trade_df, currency_df)
+
+        # Step 4: Visual summaries
+        st.header(f"Step 2: Visual Summary for {entity}")
+        summary_df = generate_summaries(enriched_trades, currency_df)
+
+        st.subheader("📊 Group-wise Impact Summary")
+        st.dataframe(summary_df)
+
+        st.subheader("🔍 Alert Volume Comparison")
+        plot_alert_summary_stacked(enriched_trades)
+
+        st.subheader("🏢 Legal Entity Alert Breakdown")
+        plot_legal_entity_breakdown(enriched_trades)
+
+        st.subheader("📤 Download Final Trade Data")
+        st.download_button(
+            f"Download Enriched Trades ({entity})",
+            enriched_trades.to_csv(index=False),
+            f"{entity}_enriched_trades.csv",
+            "text/csv"
+        )
+
+        # Audit Trail
+        st.subheader("🧾 Threshold Audit Trail")
+        display_audit_trail(currency_df)
+
+    st.success("✅ All legal entity reports processed.")
+else:
+    st.warning("👆 Upload threshold and trade files to begin.")
