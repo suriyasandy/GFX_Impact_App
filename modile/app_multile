@@ -1,0 +1,41 @@
+import streamlit as st
+from file_loader import pair_thresholds_and_trades
+from threshold_engine import process_thresholds
+from alert_logic import compute_alerts
+from summary_generator import generate_summary_views
+from charts import plot_alert_summary, plot_legal_entity_chart
+
+st.set_page_config(layout="wide", page_title="GFX Threshold Backtester App")
+st.title("🧠 GFX Threshold Backtesting App (Multi-Entity Mode)")
+
+# Step 1: Upload multiple files
+st.header("Step 1: Upload Threshold & Trade Files Per Legal Entity")
+
+threshold_files = st.file_uploader("Upload Threshold Files (one per entity)", accept_multiple_files=True)
+trade_files = st.file_uploader("Upload Trade Files (one per entity)", accept_multiple_files=True)
+
+edit_mode = st.radio("Edit Mode", ["Group-Wise", "Currency-Wise"], horizontal=True)
+
+if threshold_files and trade_files:
+    paired_data = pair_thresholds_and_trades(threshold_files, trade_files)
+
+    if not paired_data:
+        st.warning("⚠️ No matching entity names found between threshold and trade files.")
+    else:
+        for entity, files in paired_data.items():
+            st.markdown(f"---\n### 🏢 Entity: `{entity}`")
+
+            threshold_df = files["threshold"]
+            trade_df = files["trades"]
+
+            with st.expander(f"Edit Thresholds - {entity}", expanded=True):
+                processed_currency_df = process_thresholds(threshold_df, edit_mode)
+
+            trade_df = compute_alerts(trade_df, processed_currency_df)
+
+            st.subheader("📊 Summary Statistics")
+            generate_summary_views(trade_df, processed_currency_df)
+
+            st.subheader("📈 Alert Comparison Charts")
+            plot_alert_summary(trade_df)
+            plot_legal_entity_chart(trade_df)
