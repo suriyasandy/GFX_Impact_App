@@ -1,0 +1,35 @@
+import pandas as pd
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+import streamlit as st
+
+def process_thresholds(threshold_df, edit_mode="Group-Wise"):
+    # Extract only required columns
+    df = threshold_df.copy()
+    df = df[["CCY", "Old_Group", "Old_Threshold", "Proposed_Group", "Proposed_Threshold"]]
+    df.rename(columns={
+        "Proposed_Group": "Group",
+        "Old_Group": "Old_Group",
+        "Proposed_Threshold": "Proposed_Threshold"
+    }, inplace=True)
+
+    # Start with Proposed_Threshold as Final_Threshold
+    df["Final_Threshold"] = df["Proposed_Threshold"]
+
+    # --- UI: Editable Grid ---
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_columns(["Final_Threshold", "Group"], editable=True)
+    grid_response = AgGrid(df, gridOptions=gb.build(), update_mode=GridUpdateMode.VALUE_CHANGED, height=350)
+    updated_df = grid_response["data"]
+
+    # --- Assign Final Group based on Final_Threshold ---
+    group_bounds = df.groupby("Group")["Proposed_Threshold"].first().sort_values().to_dict()
+
+    def assign_group(thresh):
+        for group, bound in group_bounds.items():
+            if thresh <= bound:
+                return group
+        return list(group_bounds.keys())[-1] if group_bounds else "Group 1"
+
+    updated_df["Final_Group"] = updated_df["Final_Threshold"].apply(assign_group)
+
+    return updated_df
