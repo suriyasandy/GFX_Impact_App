@@ -1,0 +1,8 @@
+def generate_group_bounds(group_df):
+    return group_df.groupby("Proposed_Group")["Proposed_Threshold"].first().sort_values().to_dict()
+
+def assign_group(threshold, group_bounds):
+    for group, bound in group_bounds.items():
+        if threshold <= bound:
+            return group
+    return list(group_bounds.keys())[-1]  # fallback to last group
