@@ -1,0 +1,14 @@
+import datetime
+
+# Initial placeholder
+placeholder_start = datetime.date(2000, 1, 1)
+placeholder_end = datetime.date(2000, 1, 2)
+
+date_range = st.date_input("Select a date range", value=(placeholder_start, placeholder_end))
+
+# Treat placeholder as empty
+start_date, end_date = date_range
+if start_date == placeholder_start and end_date == placeholder_end:
+    st.write("No date selected yet.")
+else:
+    st.write(f"Selected range: {start_date} to {end_date}")
