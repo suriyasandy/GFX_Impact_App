@@ -1,0 +1,24 @@
+# AgGrid selection
+if selected:
+    for row in selected:
+        # Assume row contains a group or instrument field
+        selected_group = row.get("Group", None)
+        selected_instr = row.get("Instrument", None)
+
+        # Build filter condition dynamically
+        mask = (
+            (alerts_dataframe["TradeDate"] >= start_date) &
+            (alerts_dataframe["TradeDate"] <= end_date) &
+            (alerts_dataframe["LegalEntity"] == legal_entity_filter) &
+            (alerts_dataframe["SourceSystem"] == source_system_filter)
+        )
+
+        if selected_group:
+            mask &= (alerts_dataframe["Group"] == selected_group)
+        if selected_instr:
+            mask &= (alerts_dataframe["Instrument"] == selected_instr)
+
+        filtered_records = alerts_dataframe[mask]
+
+        st.subheader(f"🔍 Filtered Records for {selected_group or selected_instr}")
+        st.dataframe(filtered_records)
