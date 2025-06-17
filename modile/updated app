@@ -1,0 +1,69 @@
+import streamlit as st
+from file_loader import load_threshold_file, load_multiple_files
+from threshold_engine import process_threshold_file
+from alert_logic import compute_alerts_for_entity
+from summary_generator import (
+    generate_group_summary,
+    generate_legal_entity_summary,
+    generate_audit_trail
+)
+from charts import plot_alert_comparison, plot_entity_alerts, plot_group_alert_distribution
+import pandas as pd
+
+st.set_page_config(layout="wide", page_title="FX Threshold Backtester")
+st.title("📊 FX Threshold Calibration & Backtesting")
+
+# Upload section
+st.sidebar.header("Step 1: Upload Files")
+uploaded_threshold_file = st.sidebar.file_uploader("Upload Threshold File", type=["csv", "xlsx"])
+uploaded_trade_files = st.sidebar.file_uploader("Upload Trade File(s) - Multi Entity Supported", type=["csv", "xlsx"], accept_multiple_files=True)
+
+if uploaded_threshold_file and uploaded_trade_files:
+    # Load and process data
+    threshold_df = load_threshold_file(uploaded_threshold_file)
+    trade_dfs = load_multiple_files(uploaded_trade_files)
+    currency_df = process_threshold_file(threshold_df)
+
+    # Metric summary
+    total_trades = sum(len(df) for df in trade_dfs.values())
+    total_pairs = pd.concat(trade_dfs.values())["Instrument"].nunique()
+    st.sidebar.metric("Total Trades", total_trades)
+    st.sidebar.metric("Currency Pairs", total_pairs)
+    st.sidebar.metric("Legal Entities", len(trade_dfs))
+
+    # Compute alerts
+    alert_results = {}
+    for entity, df in trade_dfs.items():
+        alert_df = compute_alerts_for_entity(df.copy(), currency_df)
+        alert_results[entity] = alert_df
+
+    # Tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["Summary", "Group View", "Entity View", "Audit Trail"])
+
+    with tab1:
+        st.subheader("Total Alert Volume Comparison")
+        all_trades = pd.concat(alert_results.values(), ignore_index=True)
+        plot_alert_comparison(all_trades)
+
+    with tab2:
+        st.subheader("Group-wise Alert Distribution")
+        st.dataframe(generate_group_summary(currency_df, all_trades))
+        plot_group_alert_distribution(currency_df, all_trades)
+
+    with tab3:
+        st.subheader("Alert Volume by Legal Entity")
+        entity_summary_df = generate_legal_entity_summary(alert_results)
+        st.dataframe(entity_summary_df)
+        plot_entity_alerts(entity_summary_df)
+
+    with tab4:
+        st.subheader("Threshold Audit Trail")
+        audit_df = generate_audit_trail(currency_df)
+        st.dataframe(audit_df)
+
+    # Downloads
+    st.download_button("📥 Download All Trades with Flags", all_trades.to_csv(index=False), file_name="all_trades_alerts.csv")
+    st.download_button("📥 Download Audit Trail", audit_df.to_csv(index=False), file_name="audit_trail.csv")
+
+else:
+    st.info("👈 Please upload the threshold and trade files to begin.")
