@@ -1,0 +1,23 @@
+import pandas as pd
+
+def generate_group_summary(currency_df, trade_df):
+    group_summary = currency_df.groupby("Final_Group")["CCY"].agg(list).reset_index().rename(
+        columns={"Final_Group": "Group", "CCY": "Currencies"}
+    )
+    group_summary["Currencies"] = group_summary["Currencies"].apply(lambda x: ", ".join(sorted(x)))
+
+    alert_summary = trade_df.groupby("Group")[["Alert_Old", "Alert_Proposed", "Alert_Final"]].sum().reset_index()
+    trade_count = trade_df.groupby("Group")["Instrument"].count().reset_index(name="Total_Trades")
+
+    merged_summary = group_summary.merge(alert_summary, on="Group", how="left").merge(trade_count, on="Group", how="left")
+    return merged_summary
+
+def generate_legal_entity_summary(trade_df):
+    entity_df = trade_df.groupby("LegalEntity")[["Alert_Old", "Alert_Proposed", "Alert_Final"]].sum().reset_index()
+    return entity_df
+
+def build_audit_trail(currency_df):
+    audit_df = currency_df.copy()
+    audit_df["Changed?"] = audit_df["Final_Threshold"] != audit_df["Proposed_Threshold"]
+    audit_df["Change %"] = ((audit_df["Final_Threshold"] - audit_df["Proposed_Threshold"]) / audit_df["Proposed_Threshold"]).round(3)
+    return audit_df
