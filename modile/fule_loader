@@ -1,0 +1,27 @@
+# file_loader.py
+
+import pandas as pd
+
+def load_file(uploaded_file):
+    """Load a file based on extension."""
+    if uploaded_file.name.endswith(".xlsx"):
+        return pd.read_excel(uploaded_file)
+    elif uploaded_file.name.endswith(".csv"):
+        return pd.read_csv(uploaded_file)
+    else:
+        raise ValueError("Unsupported file type")
+
+def validate_files(group_df, trade_df):
+    """Basic structure checks on both files."""
+    required_group_cols = {"CCY", "Old_Threshold", "Proposed_Threshold", "Proposed_Group"}
+    required_trade_cols = {"Instrument", "LegalEntity", "deviation_percent"}
+
+    missing_group_cols = required_group_cols - set(group_df.columns)
+    missing_trade_cols = required_trade_cols - set(trade_df.columns)
+
+    if missing_group_cols:
+        raise ValueError(f"Group file missing columns: {missing_group_cols}")
+    if missing_trade_cols:
+        raise ValueError(f"Trade file missing columns: {missing_trade_cols}")
+
+    return True
