@@ -1,0 +1,37 @@
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+
+def display_dataframe_aggrid(df):
+    cell_style_jscode = JsCode("""
+    function(params) {
+        if (
+            params.data.Alert_Old !== params.data.Alert_Proposed ||
+            params.data.Alert_Old !== params.data.Alert_Final ||
+            params.data.Alert_Proposed !== params.data.Alert_Final
+        ) {
+            return { 'backgroundColor': '#ffcccc' };  // light red
+        }
+        return {};
+    }
+    """)
+
+    columns_to_show = [
+        "legal_entity", "source_system", "execution_key", "region_code",
+        "business_date", "instrument", "alert_description",
+        "Alert_Old", "Alert_Proposed", "Alert_Final"
+    ]
+
+    df = df[columns_to_show]  # Ensure only relevant columns are shown
+
+    gb = GridOptionsBuilder.from_dataframe(df)
+    for col in ["Alert_Old", "Alert_Proposed", "Alert_Final"]:
+        gb.configure_column(col, cellStyle=cell_style_jscode)
+
+    gb.configure_grid_options(domLayout="autoHeight", pagination=True)
+
+    grid_output = AgGrid(
+        df,
+        gridOptions=gb.build(),
+        fit_columns_on_grid_load=True,
+        update_mode=GridUpdateMode.NO_UPDATE,
+        height=400
+    )
