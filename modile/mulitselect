@@ -1,0 +1,27 @@
+def get_selected_records(alert_results, start_date=None, end_date=None, selected_rows=None):
+    import pandas as pd
+
+    if selected_rows is None or selected_rows.empty:
+        return pd.DataFrame()  # return empty if nothing is selected
+
+    # Convert list of dicts (from AgGrid selected_rows) to DataFrame
+    selected_df = pd.DataFrame(selected_rows)
+
+    # Extract selected entities and sources
+    legal_entities = selected_df["LegalEntity"].unique()
+    sources = selected_df["Source"].unique()
+
+    # Filter alerts by date and selection
+    filtered_df = alert_results[
+        (pd.to_datetime(alert_results["business_date"]).dt.date >= start_date) &
+        (pd.to_datetime(alert_results["business_date"]).dt.date <= end_date) &
+        (alert_results["legal_entity"].isin(legal_entities)) &
+        (alert_results["source_system"].isin(sources)) &
+        (
+            (alert_results["Alert_Old"] == True) |
+            (alert_results["Alert_Proposed"] == True) |
+            (alert_results["Alert_Final"] == True)
+        )
+    ]
+
+    return filtered_df
