@@ -1,0 +1,21 @@
+def map_threshold(instr, threshold_map):
+    try:
+        base, quote = instr.split("/")
+        return max(threshold_map.get(base, 0), threshold_map.get(quote, 0))
+    except:
+        return 0
+
+def compute_alerts(trade_df, currency_df):
+    old_map = currency_df.set_index("CCY")["Old_Threshold"].to_dict()
+    prop_map = currency_df.set_index("CCY")["Proposed_Threshold"].to_dict()
+    final_map = currency_df.set_index("CCY")["Final_Threshold"].to_dict()
+
+    trade_df["Threshold_Old"] = trade_df["Instrument"].map(lambda x: map_threshold(x, old_map))
+    trade_df["Threshold_Proposed"] = trade_df["Instrument"].map(lambda x: map_threshold(x, prop_map))
+    trade_df["Threshold_Final"] = trade_df["Instrument"].map(lambda x: map_threshold(x, final_map))
+
+    trade_df["Alert_Old"] = trade_df["deviation_percent"] > trade_df["Threshold_Old"]
+    trade_df["Alert_Proposed"] = trade_df["deviation_percent"] > trade_df["Threshold_Proposed"]
+    trade_df["Alert_Final"] = trade_df["deviation_percent"] > trade_df["Threshold_Final"]
+
+    return trade_df
