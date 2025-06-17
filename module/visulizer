@@ -1,0 +1,31 @@
+# visualizer.py
+
+import plotly.express as px
+import pandas as pd
+
+def plot_alert_comparison(trade_df):
+    alert_df = pd.DataFrame({
+        "Scenario": ["Old", "Proposed", "Final"],
+        "Alert Count": [
+            trade_df["Alert_Old"].sum(),
+            trade_df["Alert_Proposed"].sum(),
+            trade_df["Alert_Final"].sum()
+        ]
+    })
+    alert_df["Change vs Old (%)"] = ((alert_df["Alert Count"] - alert_df["Alert Count"].iloc[0]) / alert_df["Alert Count"].iloc[0] * 100).round(1)
+    alert_df["Label"] = alert_df["Alert Count"].astype(str) + " (" + alert_df["Change vs Old (%)"].astype(str) + "%)"
+
+    fig = px.bar(alert_df, x="Scenario", y="Alert Count", text="Label",
+                 color="Scenario", color_discrete_map={"Old": "gray", "Proposed": "dodgerblue", "Final": "seagreen"},
+                 title="Total Alert Volume Comparison")
+    fig.update_traces(textposition="outside")
+    fig.update_layout(yaxis_title="Alert Count", showlegend=False)
+    return fig
+
+def plot_legal_entity_breakdown(entity_df):
+    melted = entity_df.melt(id_vars="LegalEntity", var_name="Scenario", value_name="Alert Count")
+    melted["Scenario"] = melted["Scenario"].str.replace("Alert_", "")
+
+    fig = px.bar(melted, x="LegalEntity", y="Alert Count", color="Scenario", barmode="group",
+                 title="Alerts by Legal Entity")
+    return fig
