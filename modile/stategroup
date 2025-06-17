@@ -1,0 +1,26 @@
+# Initialize group-wise thresholds in session state only once
+if "group_threshold_data" not in st.session_state:
+    group_df_init = threshold_df.groupby("Proposed_Group")[["Old_Threshold", "Proposed_Threshold"]].first().reset_index()
+    group_df_init.rename(columns={"Proposed_Group": "Group"}, inplace=True)
+    group_df_init["Final_Threshold"] = group_df_init["Proposed_Threshold"]
+    st.session_state.group_threshold_data = group_df_init.copy()
+
+group_df = st.session_state.group_threshold_data.copy()
+
+# Display reset button
+if st.button("Reset Final Thresholds"):
+    st.session_state.group_threshold_data["Final_Threshold"] = st.session_state.group_threshold_data["Proposed_Threshold"]
+    st.success("✅ Thresholds reset to proposed values.")
+    group_df = st.session_state.group_threshold_data.copy()
+
+# Show editable grid
+grid_output = display_threshold_table(group_df)
+
+# Update session state with edited values
+st.session_state.group_threshold_data = grid_output["data"]
+
+# Merge with threshold_df for downstream logic
+group_final = st.session_state.group_threshold_data
+merged = pd.merge(threshold_df[["CCY", "Proposed_Group"]], group_final,
+                  left_on="Proposed_Group", right_on="Group", how="left")
+currency_df = merged[["CCY", "Group", "Old_Threshold", "Proposed_Threshold", "Final_Threshold"]]
