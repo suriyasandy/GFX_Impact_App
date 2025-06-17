@@ -1,0 +1,36 @@
+import plotly.express as px
+import pandas as pd
+import streamlit as st
+
+def plot_alert_summary(trade_df, by_group=False):
+    if by_group:
+        group_alerts = trade_df.groupby("Group")[["Alert_Old", "Alert_Proposed", "Alert_Final"]].sum().reset_index()
+        group_alerts = group_alerts.melt(id_vars="Group", var_name="Scenario", value_name="Alert Count")
+        group_alerts["Scenario"] = group_alerts["Scenario"].str.replace("Alert_", "")
+        fig = px.bar(group_alerts, x="Group", y="Alert Count", color="Scenario", barmode="stack",
+                     title="Group-wise Alert Volume Breakdown")
+    else:
+        alert_df = pd.DataFrame({
+            "Scenario": ["Old", "Proposed", "Final"],
+            "Alert Count": [
+                trade_df["Alert_Old"].sum(),
+                trade_df["Alert_Proposed"].sum(),
+                trade_df["Alert_Final"].sum()
+            ]
+        })
+        alert_df["Change vs Old (%)"] = ((alert_df["Alert Count"] - alert_df["Alert Count"].iloc[0]) / alert_df["Alert Count"].iloc[0] * 100).round(1)
+        alert_df["Label"] = alert_df["Alert Count"].astype(str) + " (" + alert_df["Change vs Old (%)"].astype(str) + "%)"
+        fig = px.bar(alert_df, x="Scenario", y="Alert Count", text="Label",
+                     color="Scenario", color_discrete_map={"Old": "gray", "Proposed": "dodgerblue", "Final": "seagreen"},
+                     title="Total Alert Volume Comparison")
+        fig.update_traces(textposition="outside")
+        fig.update_layout(showlegend=False)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_legal_entity_chart(entity_df):
+    entity_melt = entity_df.melt(id_vars="LegalEntity", var_name="Scenario", value_name="Alert Count")
+    entity_melt["Scenario"] = entity_melt["Scenario"].str.replace("Alert_", "")
+    fig = px.bar(entity_melt, x="LegalEntity", y="Alert Count", color="Scenario", barmode="group",
+                 title="Alerts by Legal Entity")
+    st.plotly_chart(fig, use_container_width=True)
