@@ -1,0 +1,46 @@
+st.subheader("Thresholds Table")
+
+if edit_mode == "Group-Wise":
+    # Initialize group-wise data only once
+    if "group_threshold_data" not in st.session_state:
+        group_df_init = threshold_df.groupby("Proposed_Group")[["Old_Threshold", "Proposed_Threshold"]].first().reset_index()
+        group_df_init.rename(columns={"Proposed_Group": "Group"}, inplace=True)
+        group_df_init["Final_Threshold"] = group_df_init["Proposed_Threshold"]
+        st.session_state.group_threshold_data = group_df_init.copy()
+
+    group_df = st.session_state.group_threshold_data.copy()
+
+    # Reset button
+    if st.button("Reset Final Thresholds"):
+        st.session_state.group_threshold_data["Final_Threshold"] = st.session_state.group_threshold_data["Proposed_Threshold"]
+        st.success("✅ Thresholds reset to proposed values.")
+        group_df = st.session_state.group_threshold_data.copy()
+
+    grid_output = display_threshold_table(group_df)
+    st.session_state.group_threshold_data = grid_output["data"]
+
+    group_final = st.session_state.group_threshold_data
+    merged = pd.merge(threshold_df[["CCY", "Proposed_Group"]],
+                      group_final,
+                      left_on="Proposed_Group", right_on="Group", how="left")
+    currency_df = merged[["CCY", "Group", "Old_Threshold", "Proposed_Threshold", "Final_Threshold"]]
+
+else:
+    # Initialize currency-wise data only once
+    if "currency_threshold_data" not in st.session_state:
+        editable_df_init = threshold_df[["CCY", "Proposed_Group", "Old_Threshold", "Proposed_Threshold"]].copy()
+        editable_df_init.rename(columns={"Proposed_Group": "Group"}, inplace=True)
+        editable_df_init["Final_Threshold"] = editable_df_init["Proposed_Threshold"]
+        st.session_state.currency_threshold_data = editable_df_init.copy()
+
+    editable_df = st.session_state.currency_threshold_data.copy()
+
+    if st.button("Reset Final Thresholds"):
+        st.session_state.currency_threshold_data["Final_Threshold"] = st.session_state.currency_threshold_data["Proposed_Threshold"]
+        st.success("✅ Thresholds reset to proposed values.")
+        editable_df = st.session_state.currency_threshold_data.copy()
+
+    grid_output = display_threshold_table(editable_df)
+    st.session_state.currency_threshold_data = grid_output["data"]
+
+    currency_df = st.session_state.currency_threshold_data
