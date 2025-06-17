@@ -1,0 +1,52 @@
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+import pandas as pd
+
+def display_dataframe_aggrid(df):
+    df = df.copy()
+
+    # Convert datetime to string
+    if 'business_date' in df.columns:
+        df['business_date'] = pd.to_datetime(df['business_date'], errors='coerce').dt.strftime('%Y-%m-%d')
+
+    # Fill NaNs and convert everything to string
+    df = df.fillna("").astype(str)
+
+    # Define highlight style row-wise (as Python dict, not JsCode)
+    def get_row_style(row):
+        if (
+            row["Alert_Old"] != row["Alert_Proposed"] or
+            row["Alert_Old"] != row["Alert_Final"] or
+            row["Alert_Proposed"] != row["Alert_Final"]
+        ):
+            return {'backgroundColor': '#ffcccc'}
+        return {}
+
+    # Precompute row styles
+    styles = df.apply(get_row_style, axis=1).tolist()
+
+    # Build Grid
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_default_column(resizable=True)
+    gb.configure_grid_options(domLayout="autoHeight", pagination=True)
+
+    grid_options = gb.build()
+    grid_options['getRowStyle'] = {
+        "function": """function(params) {
+            if (
+                params.data.Alert_Old !== params.data.Alert_Proposed ||
+                params.data.Alert_Old !== params.data.Alert_Final ||
+                params.data.Alert_Proposed !== params.data.Alert_Final
+            ) {
+                return { backgroundColor: '#ffcccc' };
+            }
+            return {};
+        }"""
+    }
+
+    AgGrid(
+        df,
+        gridOptions=grid_options,
+        fit_columns_on_grid_load=True,
+        update_mode=GridUpdateMode.NO_UPDATE,
+        height=400
+    )
