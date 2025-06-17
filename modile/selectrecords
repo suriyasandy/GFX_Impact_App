@@ -1,24 +1,32 @@
-# AgGrid selection
-if selected:
-    for row in selected:
-        # Assume row contains a group or instrument field
-        selected_group = row.get("Group", None)
-        selected_instr = row.get("Instrument", None)
+selected_rows = grid_output["selected_rows"]
+if selected_rows:  # checks if list is not empty
+    selected = selected_rows[0]  # this is a dict, e.g. {"LegalEntity": "HBME", "Source": "FLEXRATE", ...}
 
-        # Build filter condition dynamically
-        mask = (
-            (alerts_dataframe["TradeDate"] >= start_date) &
-            (alerts_dataframe["TradeDate"] <= end_date) &
-            (alerts_dataframe["LegalEntity"] == legal_entity_filter) &
-            (alerts_dataframe["SourceSystem"] == source_system_filter)
-        )
+    # Show selected values
+    st.json(selected)
 
-        if selected_group:
-            mask &= (alerts_dataframe["Group"] == selected_group)
-        if selected_instr:
-            mask &= (alerts_dataframe["Instrument"] == selected_instr)
+    # Extract required filter values
+    legal_entity = selected.get("LegalEntity")
+    source = selected.get("Source")
+    date_range = selected.get("date_range")  # e.g. "2025-06-01–2025-06-17"
 
-        filtered_records = alerts_dataframe[mask]
+    # Split start and end date safely
+    try:
+        start_date, end_date = date_range.split("–") if "–" in date_range else date_range.split("-")
+        start_date = start_date.strip()
+        end_date = end_date.strip()
+    except Exception as e:
+        st.error(f"Invalid date format in selected row: {e}")
+        start_date, end_date = None, None
 
-        st.subheader(f"🔍 Filtered Records for {selected_group or selected_instr}")
-        st.dataframe(filtered_records)
+    if legal_entity and source and start_date and end_date:
+        # Filter your main alerts dataframe (assuming it's `alert_results`)
+        filtered_df = alert_results[
+            (alert_results["LegalEntity"] == legal_entity) &
+            (alert_results["Source"] == source) &
+            (alert_results["TradeDate"] >= start_date) &
+            (alert_results["TradeDate"] <= end_date)
+        ]
+
+        st.subheader("🔍 Filtered Alert Records")
+        st.dataframe(filtered_df)
