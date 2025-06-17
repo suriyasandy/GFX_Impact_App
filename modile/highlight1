@@ -1,0 +1,46 @@
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
+
+def display_dataframe_aggrid(df):
+    df = df.copy()
+    
+    # Format datetime & sanitize for AgGrid JSON conversion
+    if 'business_date' in df.columns:
+        df['business_date'] = pd.to_datetime(df['business_date'], errors='coerce').dt.strftime('%Y-%m-%d')
+    df = df.fillna("").astype(str)
+
+    # JavaScript code to highlight mismatched cells
+    cell_style_jscode = JsCode("""
+    function(params) {
+        const a = params.data.Alert_Old;
+        const b = params.data.Alert_Proposed;
+        const c = params.data.Alert_Final;
+        if (a !== b || a !== c || b !== c) {
+            return { 'backgroundColor': '#ffcccc' };  // red highlight
+        }
+        return {};
+    }
+    """)
+
+    columns_to_show = [
+        "legal_entity", "source_system", "execution_key", "region_code",
+        "business_date", "instrument", "alert_description",
+        "Alert_Old", "Alert_Proposed", "Alert_Final"
+    ]
+
+    df = df[columns_to_show]
+
+    gb = GridOptionsBuilder.from_dataframe(df)
+    for col in ["Alert_Old", "Alert_Proposed", "Alert_Final"]:
+        gb.configure_column(col, cellStyle=cell_style_jscode)
+    
+    gb.configure_grid_options(domLayout="autoHeight", pagination=True)
+
+    grid_options = gb.build()
+
+    AgGrid(
+        df,
+        gridOptions=grid_options,
+        fit_columns_on_grid_load=True,
+        update_mode=GridUpdateMode.NO_UPDATE,
+        height=400
+    )
