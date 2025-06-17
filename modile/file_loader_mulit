@@ -1,0 +1,35 @@
+import pandas as pd
+import os
+
+def load_uploaded_files(uploaded_files):
+    """
+    Load multiple uploaded files (Excel or CSV), return as a dict of DataFrames keyed by filename.
+    """
+    data = {}
+    for uploaded_file in uploaded_files:
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        elif uploaded_file.name.endswith('.xlsx'):
+            df = pd.read_excel(uploaded_file)
+        else:
+            continue
+        # Use the filename without extension as key
+        entity_name = os.path.splitext(uploaded_file.name)[0]
+        data[entity_name] = df
+    return data
+
+def pair_thresholds_and_trades(threshold_files, trade_files):
+    """
+    Match threshold files and trade files by filename prefix (entity name), and return paired dict.
+    """
+    threshold_data = load_uploaded_files(threshold_files)
+    trade_data = load_uploaded_files(trade_files)
+
+    paired_data = {}
+    for entity in threshold_data:
+        if entity in trade_data:
+            paired_data[entity] = {
+                "threshold": threshold_data[entity],
+                "trades": trade_data[entity]
+            }
+    return paired_data
