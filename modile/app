@@ -1,0 +1,45 @@
+import streamlit as st
+from file_loader import load_file, validate_files
+from threshold_engine import generate_group_bounds, assign_group
+from alert_logic import compute_alerts
+from summary_generator import group_summary_table
+from layout import show_metrics, plot_alert_summary
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+st.set_page_config(layout="wide", page_title="GFX Threshold Backtester App")
+
+st.title("📊 GFX Threshold Backtesting App")
+
+col1, col2 = st.columns(2)
+with col1:
+    group_file = st.file_uploader("Upload Threshold Mapping File", type=["csv", "xlsx"])
+with col2:
+    trade_file = st.file_uploader("Upload Trade File", type=["csv", "xlsx"])
+
+if group_file and trade_file:
+    group_df = load_file(group_file)
+    trade_df = load_file(trade_file)
+    validate_files(group_df, trade_df)
+
+    st.header("✏️ Edit Thresholds")
+    editable_df = group_df[["CCY", "Old_Threshold", "Proposed_Threshold", "Proposed_Group"]].copy()
+    editable_df.rename(columns={"Proposed_Group": "Group"}, inplace=True)
+    editable_df["Final_Threshold"] = editable_df["Proposed_Threshold"]
+
+    gb = GridOptionsBuilder.from_dataframe(editable_df)
+    gb.configure_columns(["Final_Threshold", "Group"], editable=True)
+    grid_output = AgGrid(editable_df, gridOptions=gb.build(), update_mode=GridUpdateMode.VALUE_CHANGED, height=400)
+    currency_df = grid_output["data"]
+
+    group_bounds = generate_group_bounds(group_df)
+    currency_df["Final_Group"] = currency_df["Final_Threshold"].apply(lambda x: assign_group(x, group_bounds))
+
+    trade_df = compute_alerts(trade_df, currency_df)
+
+    st.header("📈 Summary")
+    show_metrics(trade_df)
+    summary_df, trade_df = group_summary_table(currency_df, trade_df)
+    st.subheader("📊 Group-wise Impact Summary")
+    st.dataframe(summary_df)
+
+    plot_alert_summary(trade_df)
